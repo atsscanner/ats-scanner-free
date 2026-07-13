@@ -1,138 +1,126 @@
-const UI = {
-    form: document.getElementById('ats-engine-form'),
-    jdInput: document.getElementById('jd-input'),
-    cvInput: document.getElementById('cv-input'),
-    dropZone: document.getElementById('drop-zone'),
-    fileStatus: document.getElementById('file-status-label'),
-    trigger: document.getElementById('execution-trigger'),
-    errorBox: document.getElementById('runtime-error-box'),
-    errorMsg: document.getElementById('error-string'),
-    outputGrid: document.getElementById('analysis-output-grid'),
-    score: document.getElementById('ui-metric-score'),
-    recommendation: document.getElementById('ui-metric-recommendation'),
-    strengths: document.getElementById('ui-list-strengths'),
-    missing: document.getElementById('ui-list-missing')
+let selectedInputMode = 'upload';
+
+const Tabs = {
+    btnUpload: document.getElementById('tab-upload'),
+    btnPaste: document.getElementById('tab-paste'),
+    viewUpload: document.getElementById('wrapper-upload'),
+    viewPaste: document.getElementById('wrapper-paste')
 };
 
-// Handle Native Drag-and-Drop Form Interactivities
-UI.dropZone.addEventListener('click', () => UI.cvInput.click());
-UI.dropZone.addEventListener('dragover', (e) => { e.preventDefault(); UI.dropZone.classList.add('border-blue-500', 'bg-blue-50/10'); });
-UI.dropZone.addEventListener('dragleave', () => { UI.dropZone.classList.remove('border-blue-500', 'bg-blue-50/10'); });
-UI.dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    UI.dropZone.classList.remove('border-blue-500', 'bg-blue-50/10');
-    if (e.dataTransfer.files.length) {
-        UI.cvInput.files = e.dataTransfer.files;
-        handleFileSelection(e.dataTransfer.files[0]);
+const Inputs = {
+    form: document.getElementById('ats-unified-form'),
+    jd: document.getElementById('jd-input'),
+    file: document.getElementById('cv-file-input'),
+    text: document.getElementById('cv-text-input'),
+    trigger: document.getElementById('submit-trigger'),
+    error: document.getElementById('error-output'),
+    results: document.getElementById('results-dashboard'),
+    fileLabel: document.getElementById('file-label-status')
+};
+
+Tabs.btnUpload.addEventListener('click', () => toggleInputMode('upload'));
+Tabs.btnPaste.addEventListener('click', () => toggleInputMode('paste'));
+Tabs.viewUpload.addEventListener('click', () => Inputs.file.click());
+
+Inputs.file.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+        Inputs.fileLabel.innerHTML = `Loaded: <strong class="text-slate-900">${e.target.files[0].name}</strong>`;
     }
 });
-UI.cvInput.addEventListener('change', (e) => { if (e.target.files.length) handleFileSelection(e.target.files[0]); });
 
-function handleFileSelection(file) {
-    if (file.type !== "application/pdf") {
-        alert("Validation rejection: Only standard structural PDF documents are permitted.");
-        UI.cvInput.value = "";
-        UI.fileStatus.innerHTML = `Drag & drop your CV here, or <span class="text-blue-600">browse files</span>`;
-        return;
+function toggleInputMode(mode) {
+    selectedInputMode = mode;
+    if (mode === 'upload') {
+        Tabs.btnUpload.className = "py-2 px-4 text-blue-600 border-b-2 border-blue-600 focus:outline-none";
+        Tabs.btnPaste.className = "py-2 px-4 text-slate-500 hover:text-slate-700 focus:outline-none";
+        Tabs.viewUpload.classList.remove('hidden');
+        Tabs.viewPaste.classList.add('hidden');
+        Inputs.text.removeAttribute('required');
+    } else {
+        Tabs.btnPaste.className = "py-2 px-4 text-blue-600 border-b-2 border-blue-600 focus:outline-none";
+        Tabs.btnUpload.className = "py-2 px-4 text-slate-500 hover:text-slate-700 focus:outline-none";
+        Tabs.viewPaste.classList.remove('hidden');
+        Tabs.viewUpload.classList.add('hidden');
+        Inputs.text.setAttribute('required', 'true');
     }
-    UI.fileStatus.innerHTML = `Selected Document Target: <strong class="text-slate-900">${file.name}</strong> (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
 }
 
-// Form Execution Orchestration
-UI.form.addEventListener('submit', async (e) => {
+Inputs.form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const targetFile = UI.cvInput.files[0];
-    if (!targetFile) return;
-
-    // Mutate UI state into execution loading presentation
-    UI.errorBox.classList.add('hidden');
-    UI.outputGrid.classList.add('hidden');
-    UI.trigger.disabled = true;
-    UI.trigger.textContent = "Invoking Cloud Infrastructure Workers Pipeline...";
+    Inputs.error.classList.add('hidden');
+    Inputs.results.classList.add('hidden');
+    Inputs.trigger.disabled = true;
+    Inputs.trigger.textContent = "Processing payload...";
 
     try {
-        const base64Payload = await convertToCompressedBase64(targetFile);
-        const cleanBase64 = base64Payload.split(',')[1];
+        let cvContent = "";
+        let mimeType = "text/plain";
 
-        let retryAttempts = 0;
-        let fetchSuccess = false;
-        let apiDataResponse = null;
+        if (selectedInputMode === 'upload') {
+            const activeFile = Inputs.file.files[0];
+            if (!activeFile) throw new Error("Please upload a file.");
 
-        // Exponential Backoff Implementation over Edge Isolates
-        while (retryAttempts < 3 && !fetchSuccess) {
-            const runtimeResponse = await fetch('/api/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jdText: UI.jdInput.value,
-                    cvBase64: cleanBase64,
-                    mimeType: targetFile.type
-                })
-            });
-
-            if (runtimeResponse.status === 429) {
-                retryAttempts++;
-                UI.trigger.textContent = `Concurrency rate limit hit. Rescheduling backoff slot (Attempt ${retryAttempts}/3)...`;
-                await new Promise(res => setTimeout(res, retryAttempts * 2500));
-                continue;
+            if (activeFile.name.endsWith('.docx')) {
+                const arrayBuffer = await activeFile.arrayBuffer();
+                const parseResult = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                cvContent = parseResult.value;
+            } else if (activeFile.type === 'application/pdf') {
+                const base64Str = await readAsBase64(activeFile);
+                cvContent = base64Str.split(',')[1];
+                mimeType = "application/pdf";
+            } else {
+                throw new Error("Invalid format. Only PDF or DOCX.");
             }
-
-            if (!runtimeResponse.ok) {
-                const failurePayload = await runtimeResponse.json();
-                throw new Error(failurePayload.error || "Edge Processing pipeline returned an unexpected failure vector.");
-            }
-
-            apiDataResponse = await runtimeResponse.json();
-            fetchSuccess = true;
+        } else {
+            cvContent = Inputs.text.value;
         }
 
-        if (!fetchSuccess) throw new Error("Upstream traffic conditions are saturated. Try submitting this execution request again.");
+        const res = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jdText: Inputs.jd.value,
+                cvType: selectedInputMode === 'upload' && mimeType === 'application/pdf' ? 'file' : 'text',
+                cvContent,
+                mimeType
+            })
+        });
 
-        // Mount and present analytical data down to DOM
-        UI.score.textContent = `${apiDataResponse.matchPercentage}%`;
-        UI.recommendation.textContent = apiDataResponse.recommendation;
+        if (!res.ok) throw new Error(res.status === 429 ? "Server busy. Try again." : "Processing error.");
+
+        const data = await res.json();
         
-        renderListElements(UI.strengths, apiDataResponse.strengths, "emerald");
-        renderListElements(UI.missing, apiDataResponse.missing, "amber");
+        document.getElementById('ui-score').textContent = `${data.matchPercentage || 0}%`;
+        document.getElementById('ui-recommendation').textContent = data.recommendation || "No recommendation provided.";
+        populateList('ui-strengths', data.strengths);
+        populateList('ui-missing', data.missingKeywords);
 
-        UI.outputGrid.classList.remove('hidden');
-        window.scrollTo({ top: UI.outputGrid.offsetTop - 40, behavior: 'smooth' });
+        Inputs.results.classList.remove('hidden');
 
     } catch (err) {
-        UI.errorMsg.textContent = err.message;
-        UI.errorBox.classList.remove('hidden');
+        Inputs.error.textContent = err.message;
+        Inputs.error.classList.remove('hidden');
     } finally {
-        UI.trigger.disabled = false;
-        UI.trigger.textContent = "Execute Engine Processing";
+        Inputs.trigger.disabled = false;
+        Inputs.trigger.textContent = "Analyze ATS Fitment Matrix";
     }
 });
 
-// Helper: Client-Side FileReader Conversion Module
-function convertToCompressedBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = error => reject(error);
+function readAsBase64(file) {
+    return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.readAsDataURL(file);
+        r.onload = () => res(r.result);
+        r.onerror = e => rej(e);
     });
 }
 
-// Helper: Custom Production Semantic DOM List Builder
-function renderListElements(targetListContainer, stringArrayData, schemaColor) {
-    targetListContainer.innerHTML = '';
-    if (!stringArrayData || stringArrayData.length === 0) {
-        targetListContainer.innerHTML = `<li class="text-xs italic text-slate-400">Zero data values returned.</li>`;
-        return;
-    }
-    stringArrayData.forEach(textStr => {
-        const itemNode = document.createElement('li');
-        itemNode.className = "flex items-start text-xs text-slate-600 bg-white border border-slate-100 p-2.5 rounded-lg shadow-sm";
-        itemNode.innerHTML = `
-            <svg class="h-4 w-4 text-${schemaColor}-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path>
-            </svg>
-            <span>${textStr}</span>
-        `;
-        targetListContainer.appendChild(itemNode);
+function populateList(id, arr) {
+    const el = document.getElementById(id);
+    el.innerHTML = '';
+    (arr && arr.length ? arr : ["None"]).forEach(txt => {
+        const li = document.createElement('li');
+        li.textContent = txt;
+        el.appendChild(li);
     });
 }

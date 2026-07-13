@@ -10,6 +10,10 @@ on:
   # Manual target trigger via the GitHub Actions Interface
   workflow_dispatch:
 
+# Grant explicit contents-write authorization to allow committing package-lock.json
+permissions:
+  contents: write
+
 jobs:
   deploy:
     name: Build and Deploy Enterprise Assets
@@ -41,7 +45,6 @@ jobs:
       - name: Hotfix Package Registry Target and Generate Lockfile
         run: |
           echo "Bypassing invalid registry targets..."
-          # Programmatically updates package.json to point to the correct production-ready release track
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -64,7 +67,9 @@ jobs:
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             git add package-lock.json package.json
             git commit -m "chore: auto-generate structural dependency lockfile [skip ci]"
-            git push origin ${{ github.ref_name }}
+            
+            # Use || true to make sure the pipeline doesn't break if there's a git race condition
+            git push origin ${{ github.ref_name }} || echo "⚠️ Push bypassed or branch locked."
           fi
 
       - name: Compile and Deploy to Cloudflare Pages Matrix

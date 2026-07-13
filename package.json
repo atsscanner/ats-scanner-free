@@ -1,16 +1,26 @@
 {
   "name": "ats-scanner-free",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "private": true,
-  "description": "Production-grade, zero-login ATS Scanner using Cloudflare Pages and Gemini",
+  "description": "Free client-side ATS Resume Scanner powered by Gemini",
+  "main": "dist/index.js",
   "scripts": {
-    "dev": "wrangler pages dev public",
-    "deploy": "wrangler pages deploy public"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "deploy": "wrangler pages deploy dist"
   },
   "dependencies": {
-    "@google/genai": "^0.1.2"
+    "@google/genai": "^0.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "wrangler": "^3.65.0"
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.2.0",
+    "wrangler": "^3.60.0"
   }
 }

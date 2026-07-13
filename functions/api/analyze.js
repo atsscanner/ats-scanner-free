@@ -1,31 +1,49 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import pdfParse from 'pdf-parse';
 
-// Initialize the Enterprise LLM Engine
-// Assumes GEMINI_API_KEY is configured in your deployment environment secrets
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-export default async function handler(req, res) {
+// Cloudflare Workers handler using fetch API
+export default async function handler(request, env) {
     // 1. CORS & Method Validation
-    // Adjust Access-Control headers if your frontend is hosted on a different domain
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
+    // Validate GEMINI_API_KEY is configured
+    if (!env.GEMINI_API_KEY) {
+        return new Response(JSON.stringify({ error: 'GEMINI_API_KEY environment variable not configured.' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
     }
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed. Engine requires POST requests.' });
+    // Handle CORS preflight
+    if (request.method === 'OPTIONS') {
+        return new Response(null, {
+            status: 200,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+            }
+        });
+    }
+
+    if (request.method !== 'POST') {
+        return new Response(JSON.stringify({ error: 'Method Not Allowed. Engine requires POST requests.' }), {
+            status: 405,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
     }
 
     try {
-        const { jdText, cvType, cvContent, mimeType } = req.body;
+        // Initialize the Enterprise LLM Engine with proper API key from Cloudflare env
+        const ai = new GoogleGenerativeAI({ apiKey: env.GEMINI_API_KEY });
+        
+        // Parse request body
+        const { jdText, cvType, cvContent, mimeType } = await request.json();
 
         // 2. Payload Validation
         if (!jdText || !cvContent) {
-            return res.status(400).json({ error: 'Missing mandatory target job description or CV payload.' });
+            return new Response(JSON.stringify({ error: 'Missing mandatory target job description or CV payload.' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
         }
 
         let candidateText = "";
@@ -35,9 +53,12 @@ export default async function handler(req, res) {
             // Buffer size calculation to protect against serverless memory/timeout crashes
             const base64Size = Buffer.byteLength(cvContent, 'base64');
             
-            // Hard cap at ~4.5MB to ensure stable Vercel/Cloudflare execution
+            // Hard cap at ~4.5MB to ensure stable Cloudflare execution
             if (base64Size > 4.5 * 1024 * 1024) {
-                return res.status(413).json({ error: 'Payload exceeds 4.5MB serverless processing limits.' });
+                return new Response(JSON.stringify({ error: 'Payload exceeds 4.5MB serverless processing limits.' }), {
+                    status: 413,
+                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+                });
             }
 
             // Convert Base64 back to binary buffer for pdf-parse
@@ -62,15 +83,16 @@ You must output ONLY valid JSON matching this exact schema without markdown form
 }`;
 
         // 5. LLM Execution Engine
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+        const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        
+        const response = await model.generateContent({
             contents: [
                 { 
                     role: 'user', 
                     parts: [{ text: `${systemPrompt}\n\n---JOB DESCRIPTION---\n${jdText}\n\n---CANDIDATE RESUME---\n${candidateText}` }] 
                 }
             ],
-            config: {
+            generationConfig: {
                 // Force JSON compliance at the API level
                 responseMimeType: "application/json",
                 // Low temperature for highly deterministic, analytical scoring
@@ -79,15 +101,22 @@ You must output ONLY valid JSON matching this exact schema without markdown form
         });
 
         // 6. Response Mapping
-        const resultData = JSON.parse(response.text());
-        return res.status(200).json(resultData);
+        const responseText = response.response.text();
+        const resultData = JSON.parse(responseText);
+        return new Response(JSON.stringify(resultData), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
 
     } catch (error) {
         console.error('ATS Engine Execution Exception:', error);
         
         // Return a clean error to the frontend error handler
-        return res.status(500).json({ 
+        return new Response(JSON.stringify({ 
             error: 'Internal evaluation exception. Ensure document is not password protected or corrupted.' 
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
         });
     }
 }

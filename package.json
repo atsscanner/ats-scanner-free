@@ -7,6 +7,9 @@
     "dev": "wrangler pages dev public",
     "deploy": "wrangler pages deploy public"
   },
+  "dependencies": {
+    "@google/genai": "^0.1.2"
+  },
   "devDependencies": {
     "wrangler": "^3.65.0"
   }

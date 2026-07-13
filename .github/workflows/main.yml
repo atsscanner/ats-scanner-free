@@ -68,12 +68,17 @@ jobs:
             git add package-lock.json package.json
             git commit -m "chore: auto-generate structural dependency lockfile [skip ci]"
             
-            # Use || true to make sure the pipeline doesn't break if there's a git race condition
             git push origin ${{ github.ref_name }} || echo "⚠️ Push bypassed or branch locked."
           fi
 
+      # Production compilation layer to generate the final /dist directory assets
+      - name: Build Web Application Assets
+        run: npm run build --if-present
+
       - name: Compile and Deploy to Cloudflare Pages Matrix
-        run: npm run deploy
+        # Overrode package.json deploy command arguments directly.
+        # This creates the project if it doesn't exist, and forces upload even if the local git tree has uncommitted edits.
+        run: npx wrangler pages deploy dist --project-name="ats-scanner-free" --commit-dirty=true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

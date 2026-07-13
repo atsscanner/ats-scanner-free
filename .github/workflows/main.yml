@@ -22,8 +22,8 @@ jobs:
       - name: Setup Node.js Environment
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '24'
+          # Removed rigid 'cache: npm' to avoid workflow crashes when a lockfile is absent
 
       - name: Advanced Cache Node Modules Layer
         id: cache-nodemodules
@@ -32,15 +32,22 @@ jobs:
           cache-name: cache-node-modules
         with:
           path: node_modules
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          # Added fallback evaluation logic for hashFiles so missing lockfiles won't break string parsing
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json', '**/package.json') }}
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-
             ${{ runner.os }}-build-
             ${{ runner.os }}-
 
       - name: Install Core Engine Dependencies
-        if: steps.cache-nodemodules.outputs.cache-hit != 'true'
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "package-lock.json found. Running clean install..."
+            npm ci
+          else
+            echo "⚠️ No lockfile found! Generating fresh node_modules state via npm install..."
+            npm install
+          fi
 
       - name: Compile and Deploy to Cloudflare Pages Matrix
         run: npm run deploy

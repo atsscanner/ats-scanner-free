@@ -1,28 +1,31 @@
 name: Deploy ATS Scanner to Cloudflare Pages
 
 on:
+  # Auto-trigger execution on pushes to primary production branches
   push:
     branches:
       - main
       - master
+  
+  # Manual target trigger via the GitHub Actions Interface
   workflow_dispatch:
 
 jobs:
   deploy:
-    name: Build and Deploy
+    name: Build and Deploy Enterprise Assets
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository Configuration
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js Environment
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Cache Node Modules
+      - name: Advanced Cache Node Modules Layer
         id: cache-nodemodules
         uses: actions/cache@v4
         env:
@@ -35,12 +38,13 @@ jobs:
             ${{ runner.os }}-build-
             ${{ runner.os }}-
 
-      - name: Install Dependencies
+      - name: Install Core Engine Dependencies
         if: steps.cache-nodemodules.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Deploy to Cloudflare Pages
+      - name: Compile and Deploy to Cloudflare Pages Matrix
         run: npm run deploy
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

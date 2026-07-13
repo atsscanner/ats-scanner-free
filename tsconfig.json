@@ -25,6 +25,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["src"],
+  "include": ["atsEngineConfig.ts", "functions/**/*.ts", "functions/**/*.js"],
+  "exclude": ["node_modules", "dist", "build"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

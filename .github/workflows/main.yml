@@ -19,7 +19,6 @@ jobs:
       - name: Checkout Repository Configuration
         uses: actions/checkout@v4
         with:
-          # Required token parameters to authorize the auto-commit step back into the repository
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js Environment
@@ -39,18 +38,28 @@ jobs:
             ${{ runner.os }}-build-${{ env.cache-name }}-
             ${{ runner.os }}-build-
 
-      - name: Resolve Dependencies and Generate Lockfile
+      - name: Hotfix Package Registry Target and Generate Lockfile
         run: |
+          echo "Bypassing invalid registry targets..."
+          # Programmatically updates package.json to point to the correct production-ready release track
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            if (pkg.dependencies && pkg.dependencies['@google/genai']) {
+              pkg.dependencies['@google/genai'] = '^1.0.0';
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+              console.log('✅ Successfully hotfixed package.json dependency targets.');
+            }
+          "
+
           if [ -f package-lock.json ]; then
-            echo "✅ package-lock.json found. Running deterministic clean install..."
+            echo "package-lock.json found. Running deterministic clean install..."
             npm ci
           else
-            echo "⚠️ No lockfile found! Upgrading registry configurations..."
-            # Adjust dynamic packages to clean target definitions before installing
-            npm install @google/genai --save-exact
+            echo "⚠️ No lockfile found! Provisioning dependencies..."
             npm install
             
-            echo "🚀 Generating and committing missing package-lock.json to repository..."
+            echo "🚀 Generating and committing missing package-lock.json back to repository..."
             git config --global user.name "github-actions[bot]"
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             git add package-lock.json package.json

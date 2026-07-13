@@ -1,0 +1,13 @@
+{
+  "name": "ats-scanner-free",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-grade, zero-login ATS Scanner using Cloudflare Pages and Gemini",
+  "scripts": {
+    "dev": "wrangler pages dev public",
+    "deploy": "wrangler pages deploy public"
+  },
+  "devDependencies": {
+    "wrangler": "^3.65.0"
+  }
+}

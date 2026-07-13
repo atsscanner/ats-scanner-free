@@ -1,13 +1,10 @@
 name: Deploy ATS Scanner to Cloudflare Pages
 
 on:
-  # Auto-trigger on pushes to the main branch
   push:
     branches:
       - main
       - master
-  
-  # Manual trigger from the GitHub Actions UI
   workflow_dispatch:
 
 jobs:
@@ -25,8 +22,22 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache Node Modules
+        id: cache-nodemodules
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
       - name: Install Dependencies
-        run: npm install
+        if: steps.cache-nodemodules.outputs.cache-hit != 'true'
+        run: npm ci
 
       - name: Deploy to Cloudflare Pages
         run: npm run deploy

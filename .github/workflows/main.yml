@@ -18,12 +18,14 @@ jobs:
     steps:
       - name: Checkout Repository Configuration
         uses: actions/checkout@v4
+        with:
+          # Required token parameters to authorize the auto-commit step back into the repository
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js Environment
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          # Removed rigid 'cache: npm' to avoid workflow crashes when a lockfile is absent
 
       - name: Advanced Cache Node Modules Layer
         id: cache-nodemodules
@@ -32,21 +34,28 @@ jobs:
           cache-name: cache-node-modules
         with:
           path: node_modules
-          # Added fallback evaluation logic for hashFiles so missing lockfiles won't break string parsing
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json', '**/package.json') }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package.json') }}
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-
             ${{ runner.os }}-build-
-            ${{ runner.os }}-
 
-      - name: Install Core Engine Dependencies
+      - name: Resolve Dependencies and Generate Lockfile
         run: |
           if [ -f package-lock.json ]; then
-            echo "package-lock.json found. Running clean install..."
+            echo "✅ package-lock.json found. Running deterministic clean install..."
             npm ci
           else
-            echo "⚠️ No lockfile found! Generating fresh node_modules state via npm install..."
+            echo "⚠️ No lockfile found! Upgrading registry configurations..."
+            # Adjust dynamic packages to clean target definitions before installing
+            npm install @google/genai --save-exact
             npm install
+            
+            echo "🚀 Generating and committing missing package-lock.json to repository..."
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json package.json
+            git commit -m "chore: auto-generate structural dependency lockfile [skip ci]"
+            git push origin ${{ github.ref_name }}
           fi
 
       - name: Compile and Deploy to Cloudflare Pages Matrix
